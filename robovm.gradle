@@ -1,0 +1,111 @@
+apply plugin: 'java'
+
+import org.robovm.compiler.AppCompiler;
+import org.robovm.compiler.config.Arch;
+import org.robovm.compiler.config.Config;
+import org.robovm.compiler.config.OS;
+
+buildscript {
+    ext.robovmVersion = '0.0.2-SNAPSHOT'
+    ext.roboVMDist = "$buildDir/unpack"
+
+    repositories {
+        maven {
+            url 'https://oss.sonatype.org/content/repositories/snapshots'
+        }
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath "org.robovm:robovm-compiler:$robovmVersion"
+    }
+
+}
+
+configurations {
+    robovm
+}
+
+repositories {
+    maven {
+        url 'https://oss.sonatype.org/content/repositories/snapshots'
+    }
+    mavenCentral()
+}
+
+dependencies {
+    robovm "org.robovm:robovm-dist:$robovmVersion@tar.gz"
+    compile "org.robovm:robovm-rt:$robovmVersion"
+}
+
+task unpackRoboVM(type: Copy) {
+    configurations.robovm.each{
+        from tarTree(it)
+    }
+    into roboVMDist
+}
+
+
+class RoboVMTask extends DefaultTask {
+
+    File robovmDist
+    String mainClass
+    OS os
+    Arch arch
+
+    @OutputDirectory
+    File outputDir
+
+    @Input
+    FileCollection classpath
+
+    @TaskAction
+    void build() {
+
+//        logger.info("Building RoboVM app");
+
+        // configure the basic options
+        Config.Builder builder = new Config.Builder()
+                .home(new Config.Home(robovmDist))
+                .mainClass(mainClass)
+                .os(os)
+                .arch(arch)
+                .installDir(outputDir);
+
+        // configure the runtime classpath
+
+        classpath.each {File file ->
+//                if (getLog().isDebugEnabled()) {
+//                    getLog().debug("Including classpath element for RoboVM app: " + path);
+//                }
+                builder.addClasspathEntry(file);
+        }
+
+        // execute the RoboVM build
+
+        try {
+            Config config = builder.build();
+            AppCompiler compiler = new AppCompiler(config);
+            compiler.compile();
+            config.getTarget().install();
+        } catch (IOException e) {
+            throw new GradleException("Error resolving application classpath for RoboVM build", e);
+        }
+    }
+}
+
+
+task roboVM(type: RoboVMTask) {
+    dependsOn unpackRoboVM, classes
+    robovmDist = file("$unpackRoboVM.destinationDir/robovm-$robovmVersion")
+
+    classpath = files(
+            project.configurations.archives.artifacts.files.collect{it},
+            project.convention.getPlugin(JavaPluginConvention).sourceSets[SourceSet.MAIN_SOURCE_SET_NAME].runtimeClasspath)
+
+    outputDir = file "$buildDir/robovm"
+    os = 'ios'
+    arch = 'x86'
+}
+
+assemble.dependsOn(roboVM)

@@ -1,0 +1,11 @@
+apply from: 'robovm.gradle'
+apply plugin: 'java'
+
+dependencies {
+    compile "org.robovm:robovm-cocoatouch:$robovmVersion"
+}
+
+roboVM {
+    mainClass = 'org.robovm.sample.ios.RoboVMSampleIOSApp'
+}
+
